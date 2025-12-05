@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>裝修工程專案管理表 - 極簡版</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome CDN for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* 日系極簡風基礎設定 */
+        :root {
+            --primary-color: #333;
+            --secondary-color: #f5f5f5; /* 更淺的背景色 */
+            --accent-color: #4CAF50;
+            --danger-color: #E57373;
+            --text-color: #212121;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background-color: var(--secondary-color);
+            color: var(--text-color);
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05); /* 更明顯的軟陰影 */
+            transition: all 0.2s ease-in-out;
+        }
+
+        .minimal-button {
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.15s ease-in-out;
+        }
+        .minimal-button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* 隱藏原生滾動條，保持簡潔 */
+        .overflow-x-auto::-webkit-scrollbar {
+            display: none;
+        }
+        .overflow-x-auto {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        /* 極簡輸入框樣式 */
+        .minimal-input {
+            transition: border-color 0.15s ease-in-out;
+            @apply w-full p-2 border border-gray-200 rounded-lg text-gray-700 focus:border-gray-500 focus:ring-0;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Global State & Configuration -->
+    <script type="text/javascript">
+        // --- 核心配置與資料結構 ---
+        const APP_DATA_KEY = 'interior_design_projects_v3';
+        let globalData = {
+            currentProjectId: null,
+            projects: [] // 專案列表
+        };
+
+        const createNewProject = (name = '新的工程專案') => ({
+            id: crypto.randomUUID(),
+            name: name,
+            startDate: '2025-12-01', // 範例開始日期
+            endDate: '2026-03-30',   // 範例結束日期
+            // 區塊 2: 收入 - 合約
+            engineeringContract: {
+                totalAmount: 1200000, // 儲存原始合約總額，用於百分比計算基準
+                payments: [
+                    { id: crypto.randomUUID(), term: '第一期：簽約訂金', percentage: 20, amount: 240000, dueDate: '2025-12-05', status: 'received' },
+                    { id: crypto.randomUUID(), term: '第二期：泥作進場', percentage: 30, amount: 360000, dueDate: '2026-01-15', status: 'unpaid' },
+                    { id: crypto.randomUUID(), term: '第三期：木作進場', percentage: 30, amount: 360000, dueDate: '2026-02-28', status: 'unpaid' },
+                    { id: crypto.randomUUID(), term: '第四期：完工驗收', percentage: 20, amount: 240000, dueDate: '2026-03-30', status: 'unpaid' },
+                ]
+            },
+            designContract: {
+                totalAmount: 180000, // 儲存原始合約總額，用於百分比計算基準
+                payments: [
+                    { id: crypto.randomUUID(), term: '第一期：簽約訂金', percentage: 40, amount: 72000, dueDate: '2025-12-01', status: 'received' },
+                    { id: crypto.randomUUID(), term: '第二期：立面設計', percentage: 30, amount: 54000, dueDate: '2025-12-20', status: 'unpaid' },
+                    { id: crypto.randomUUID(), term: '第三期：圖面交付', percentage: 30, amount: 54000, dueDate: '2026-01-05', status: 'unpaid' },
+                ]
+            },
+            // 區塊 3: 工程追加/減少 (範例)
+            adjustments: [
+                {
+                    id: crypto.randomUUID(),
+                    type: 'add', // 追加
+                    item: '主臥更衣室層板',
+                    date: '2025-12-02',
+                    amount: 25000
+                }
+            ],
+            // 區塊 4: 設計師代購 (範例)
+            purchases: [
+                {
+                    id: crypto.randomUUID(),
+                    item: 'IKEA把手',
+                    date: '2025-12-02',
+                    amount: 5000
+                }
+            ],
+            // 區塊 5: 外包廠商請款 (範例)
+            vendors: [
+                {
+                    id: crypto.randomUUID(),
+                    name: '拆除工程',
+                    company: 'A-pon工作室',
+                    contractTotal: 200000,
+                    payments: [{
+                        id: crypto.randomUUID(),
+                        term: '進場訂金',
+                        date: '2025-12-02',
+                        payment: 24000,
+                        fee: 15,
+                        notes: '轉帳' // 預設備註
+                    }]
+                }
+            ],
+        });
+
+        // --- 資料儲存與載入 ---
+        const saveData = () => {
+            try {
+                localStorage.setItem(APP_DATA_KEY, JSON.stringify(globalData));
+            } catch (error) {
+                console.error('儲存資料失敗:', error);
+            }
+        };
+
+        const loadData = () => {
+            const data = localStorage.getItem(APP_DATA_KEY);
+            if (data) {
+                globalData = JSON.parse(data);
+            }
+            if (globalData.projects.length === 0) {
+                const newProject = createNewProject();
+                globalData.projects.push(newProject);
+                globalData.currentProjectId = newProject.id;
+                saveData();
+            }
+        };
+
+        // --- 核心計算邏輯 ---
+        const calculateProjectSummary = (project) => {
+            let totalReceivedIncome = 0;
+            let totalAdjustmentIncome = 0;
+            let totalAdjustmentExpense = 0;
+            let totalPurchaseAmount = 0;
+            let totalVendorExpense = 0;
+            let totalVendorPayment = 0;
+            let totalVendorFee = 0;
+
+            // 1. 日期計算 (總工作天數)
+            let totalWorkingDays = 0;
+            const startDate = new Date(project.startDate);
+            const endDate = new Date(project.endDate);
+            if (!isNaN(startDate) && !isNaN(endDate) && startDate <= endDate) {
+                const timeDiff = endDate.getTime() - startDate.getTime();
+                totalWorkingDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+            }
+
+            // 2. 收入計算 (Block 2)
+            [project.engineeringContract, project.designContract].forEach(contract => {
+                contract.payments.forEach(p => {
+                    const amount = parseFloat(p.amount) || 0;
+                    if (p.status === 'received') {
+                        totalReceivedIncome += amount;
+                    }
+                });
+            });
+
+            // 3. 工程追加/減少 (Block 3)
+            project.adjustments.forEach(adj => {
+                const amount = parseFloat(adj.amount) || 0;
+                if (adj.type === 'add') {
+                    totalAdjustmentIncome += amount; // 計入總收入
+                } else if (adj.type === 'subtract') {
+                    totalAdjustmentExpense += amount; // 計入總支出 (減少的錢視為省下的成本)
+                }
+            });
+
+            // 4. 設計師代購 (Block 4)
+            project.purchases.forEach(p => {
+                totalPurchaseAmount += parseFloat(p.amount) || 0; // 同時計入收支
+            });
+
+            // 5. 廠商請款 (Block 5)
+            project.vendors.forEach(vendor => {
+                vendor.payments.forEach(p => {
+                    totalVendorPayment += parseFloat(p.payment) || 0;
+                    totalVendorFee += parseFloat(p.fee) || 0;
+                });
+            });
+            totalVendorExpense = totalVendorPayment + totalVendorFee; // 總廠商支出
+
+            // 總結計算
+            const totalIncome = totalReceivedIncome + totalAdjustmentIncome + totalPurchaseAmount;
+            const totalExpense = totalVendorExpense + totalPurchaseAmount - totalAdjustmentExpense;
+            const totalProfit = totalIncome - totalExpense;
+
+            // 比例計算 (防止除以零)
+            const profitRatio = totalIncome > 0 ? (totalProfit / totalIncome) : 0;
+            const costRatio = totalIncome > 0 ? (totalExpense / totalIncome) : 0;
+
+            return {
+                totalIncome: totalIncome,
+                totalExpense: totalExpense,
+                totalProfit: totalProfit,
+                profitRatio: profitRatio,
+                costRatio: costRatio,
+                totalWorkingDays: totalWorkingDays,
+            };
+        };
+
+        // --- 渲染與格式化工具 ---
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(amount);
+        };
+
+        const formatPercentage = (ratio) => {
+            return (ratio * 100).toFixed(1) + '%';
+        };
+
+        const getCurrentProject = () => {
+            return globalData.projects.find(p => p.id === globalData.currentProjectId);
+        };
+
+        const renderApp = () => {
+            const currentView = document.getElementById('app-container').dataset.view;
+            if (currentView === 'project-detail') {
+                renderProjectDetailView();
+            } else if (currentView === 'annual-summary') {
+                renderAnnualSummaryView();
+            }
+            saveData();
+        };
+
+        const switchView = (viewName) => {
+            const container = document.getElementById('app-container');
+            container.dataset.view = viewName;
+            document.getElementById('project-detail-view').classList.toggle('hidden', viewName !== 'project-detail');
+            document.getElementById('annual-summary-view').classList.toggle('hidden', viewName !== 'annual-summary');
+            renderApp();
+        };
+
+        // --- View 1: 專案詳情渲染 (Project Detail) ---
+        const renderProjectDetailView = () => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const summary = calculateProjectSummary(project);
+
+            // 區塊 1: 總結
+            document.getElementById('project-name-input').value = project.name;
+            document.getElementById('project-start-date').value = project.startDate;
+            document.getElementById('project-end-date').value = project.endDate;
+            document.getElementById('total-working-days').textContent = `${summary.totalWorkingDays} 天`;
+
+            document.getElementById('total-profit').textContent = formatCurrency(summary.totalProfit);
+            document.getElementById('profit-ratio').textContent = formatPercentage(summary.profitRatio);
+            document.getElementById('total-income').textContent = formatCurrency(summary.totalIncome);
+            document.getElementById('total-expense').textContent = formatCurrency(summary.totalExpense);
+            document.getElementById('cost-ratio').textContent = formatPercentage(summary.costRatio);
+
+            // 區塊 2: 合約收入
+            renderContractSection('engineering-contract', project.engineeringContract, 'engineering', '工程合約款項');
+            renderContractSection('design-contract', project.designContract, 'design', '設計合約款項');
+
+            // 區塊 3: 工程追加/減少
+            renderAdjustments(project.adjustments);
+
+            // 區塊 4: 設計師代購
+            renderPurchases(project.purchases);
+
+            // 區塊 5: 外包廠商請款
+            renderVendors(project.vendors);
+        };
+
+        // 渲染子函數：合約收入區塊 (Block 2)
+        const renderContractSection = (containerId, contract, type, title) => {
+            const container = document.getElementById(containerId);
+            const contractTotal = parseFloat(contract.totalAmount) || 0; // 原始合約總額 (計算基準)
+            let subTotalAll = 0; // 所有期數的金額總和 (用於檢查)
+            let subTotalReceived = 0; // 已收金額總和
+
+            const paymentsHtml = contract.payments.map(p => {
+                const currentAmount = parseFloat(p.amount) || 0;
+                subTotalAll += currentAmount;
+                const isReceived = p.status === 'received';
+
+                if (isReceived) {
+                    subTotalReceived += currentAmount;
+                }
+
+                return `
+                    <div class="grid grid-cols-7 gap-2 items-center py-2 border-b border-gray-100 text-sm">
+                        <input type="text" value="${p.term}" data-id="${p.id}" data-type="${type}" data-field="term" onchange="handleContractChange(this)"
+                               class="col-span-2 minimal-input p-1">
+                        <input type="number" min="0" max="100" step="0.01" value="${p.percentage}" data-id="${p.id}" data-type="${type}" data-field="percentage" onchange="handleContractChange(this)"
+                               class="minimal-input p-1 text-right">
+                        <input type="number" value="${p.amount}" data-id="${p.id}" data-type="${type}" data-field="amount" onchange="handleContractChange(this)"
+                               class="minimal-input p-1 text-right">
+                        <input type="date" value="${p.dueDate}" data-id="${p.id}" data-type="${type}" data-field="dueDate" onchange="handleContractChange(this)"
+                               class="minimal-input p-1 text-xs">
+                        <button onclick="toggleContractStatus('${type}', '${p.id}')"
+                                class="minimal-button text-xs ${isReceived ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'} p-1">
+                            ${isReceived ? '已收' : '未收'}
+                        </button>
+                        <button onclick="deleteContractPayment('${type}', '${p.id}')" class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+
+            // Contract Total Check (UI Helper)
+            // 檢查所有期數的金額總和是否與原始合約總額一致
+            const isTotalMismatched = Math.abs(contractTotal - subTotalAll) > 1; // 允許微小的浮點數誤差
+
+            container.innerHTML = `
+                <div class="mb-6">
+                    <!-- 移除手動調整的總額欄位，僅顯示合約名稱和內部計算基準 -->
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-bold text-gray-700">${title} (原始總額: ${formatCurrency(contractTotal)})</h4>
+                    </div>
+
+                    <div class="grid grid-cols-7 gap-2 text-xs font-semibold text-gray-500 py-2 border-b">
+                        <div class="col-span-2">期數/名目</div>
+                        <div>比例(%)</div>
+                        <div>金額</div>
+                        <div>預計日期</div>
+                        <div>狀態</div>
+                        <div>刪除</div>
+                    </div>
+                    <div id="${type}-payments-container" class="overflow-x-auto min-w-full">
+                        ${paymentsHtml}
+                    </div>
+                    <div class="flex justify-between items-start mt-3">
+                        <button onclick="addContractPayment('${type}')" class="minimal-button bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 text-xs py-1 px-2">
+                            <i class="fas fa-plus-circle"></i> 新增期數/名目
+                        </button>
+                        <div class="flex flex-col items-end">
+                             ${isTotalMismatched ?
+                                `<p class="text-xs text-red-500 mb-1">注意：所有期數總和 (${formatCurrency(subTotalAll)}) 與原始合約總額不一致。</p>` : ''}
+                            <p class="text-sm font-semibold text-gray-600">
+                                已收總額：<span id="${type}-subtotal-amount" class="text-green-600 font-bold">${formatCurrency(subTotalReceived)}</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        // 渲染子函數：工程追加/減少 (Block 3)
+        const renderAdjustments = (adjustments) => {
+            const container = document.getElementById('adjustments-container');
+            let html = `
+                <div class="grid grid-cols-7 gap-2 text-xs font-semibold text-gray-500 py-2 border-b">
+                    <div class="col-span-2">類型</div>
+                    <div class="col-span-2">項目/原因</div>
+                    <div class="col-span-1">發生日期</div>
+                    <div class="col-span-1 text-right">金額(含稅)</div>
+                    <div></div>
+                </div>
+            `;
+            adjustments.forEach(adj => {
+                const isAddition = adj.type === 'add';
+                html += `
+                    <div class="grid grid-cols-7 gap-2 items-center py-2 border-b border-gray-100 text-sm">
+                        <select data-id="${adj.id}" data-field="type" onchange="handleAdjustmentChange(this)"
+                                class="col-span-2 minimal-input p-1 ${isAddition ? 'bg-green-50' : 'bg-red-50'}">
+                            <option value="add" ${isAddition ? 'selected' : ''}>追加 (+) 收入</option>
+                            <option value="subtract" ${!isAddition ? 'selected' : ''}>減少 (-) 支出</option>
+                        </select>
+                        <input type="text" value="${adj.item}" data-id="${adj.id}" data-field="item" onchange="handleAdjustmentChange(this)"
+                               class="col-span-2 minimal-input p-1">
+                        <input type="date" value="${adj.date}" data-id="${adj.id}" data-field="date" onchange="handleAdjustmentChange(this)"
+                               class="minimal-input p-1 text-xs">
+                        <input type="number" value="${adj.amount}" data-id="${adj.id}" data-field="amount" onchange="handleAdjustmentChange(this)"
+                               class="minimal-input p-1 text-right ${isAddition ? 'text-green-600' : 'text-red-600'}">
+                        <button onclick="deleteAdjustment('${adj.id}')" class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        };
+
+        // 渲染子函數：設計師代購 (Block 4)
+        const renderPurchases = (purchases) => {
+            const container = document.getElementById('purchases-container');
+            let html = `
+                <div class="grid grid-cols-5 gap-2 text-xs font-semibold text-gray-500 py-2 border-b">
+                    <div class="col-span-2">品項</div>
+                    <div>日期</div>
+                    <div class="text-right">金額</div>
+                    <div></div>
+                </div>
+            `;
+            purchases.forEach(p => {
+                html += `
+                    <div class="grid grid-cols-5 gap-2 items-center py-2 border-b border-gray-100 text-sm">
+                        <input type="text" value="${p.item}" data-id="${p.id}" data-field="item" onchange="handlePurchaseChange(this)"
+                               class="col-span-2 minimal-input p-1">
+                        <input type="date" value="${p.date}" data-id="${p.id}" data-field="date" onchange="handlePurchaseChange(this)"
+                               class="minimal-input p-1 text-xs">
+                        <input type="number" value="${p.amount}" data-id="${p.id}" data-field="amount" onchange="handlePurchaseChange(this)"
+                               class="minimal-input p-1 text-right">
+                        <button onclick="deletePurchase('${p.id}')" class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        };
+
+        // 渲染子函數：外包廠商請款 (Block 5)
+        const renderVendors = (vendors) => {
+            const container = document.getElementById('vendors-container');
+            container.innerHTML = '';
+
+            vendors.forEach(vendor => {
+                const contractTotal = parseFloat(vendor.contractTotal) || 0;
+                // 注意：剩餘應付款只計算 'payment'，不含 fee
+                const totalPaid = vendor.payments.reduce((sum, p) => sum + (parseFloat(p.payment) || 0), 0);
+                const remainingDue = contractTotal - totalPaid;
+
+                // 廠商請款表格
+                const paymentsHtml = vendor.payments.map(p => {
+                    const notesDisplay = p.notes;
+                    let linkButton = notesDisplay;
+                    // URL 檢測並轉換為連結
+                    try {
+                        const url = new URL(notesDisplay);
+                        // 簡單檢查是否為常見的協議
+                        if (url.protocol === 'http:' || url.protocol === 'https:') {
+                            linkButton = `<a href="${notesDisplay}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors text-xs truncate max-w-full inline-block"><i class="fas fa-external-link-alt"></i> 連結</a>`;
+                        }
+                    } catch (e) {
+                        // 不是網址，則顯示文字
+                        linkButton = notesDisplay;
+                    }
+
+                    return `
+                        <div class="grid grid-cols-6 gap-2 items-center py-2 border-b border-gray-100 text-sm">
+                            <input type="text" value="${p.term}" data-vendor-id="${vendor.id}" data-id="${p.id}" data-field="term" onchange="handleVendorPaymentChange(this)" class="minimal-input p-1">
+                            <input type="date" value="${p.date}" data-vendor-id="${vendor.id}" data-id="${p.id}" data-field="date" onchange="handleVendorPaymentChange(this)" class="minimal-input p-1 text-xs">
+                            <input type="number" value="${p.payment}" data-vendor-id="${vendor.id}" data-id="${p.id}" data-field="payment" onchange="handleVendorPaymentChange(this)" class="minimal-input p-1 text-right">
+                            <input type="number" value="${p.fee}" data-vendor-id="${vendor.id}" data-id="${p.id}" data-field="fee" onchange="handleVendorPaymentChange(this)" class="minimal-input p-1 text-right">
+                            <div class="flex flex-col space-y-1">
+                                <input type="text" value="${p.notes}" data-vendor-id="${vendor.id}" data-id="${p.id}" data-field="notes" onchange="handleVendorPaymentChange(this)" class="minimal-input p-1">
+                                <p class="text-xs text-gray-500">${linkButton}</p>
+                            </div>
+                            <button onclick="deleteVendorPayment('${vendor.id}', '${p.id}')" class="text-gray-400 hover:text-red-500 transition-colors">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML += `
+                    <div id="vendor-${vendor.id}" class="card p-4 mb-6">
+                        <div class="flex justify-between items-start mb-4 border-b pb-2">
+                            <div class="flex flex-col">
+                                <input type="text" value="${vendor.name}" data-id="${vendor.id}" data-field="name" onchange="handleVendorChange(this)"
+                                       class="text-xl font-bold p-1 focus:border-gray-500 focus:ring-0 mb-1">
+                                <input type="text" value="${vendor.company}" data-id="${vendor.id}" data-field="company" onchange="handleVendorChange(this)"
+                                       class="text-sm text-gray-500 p-1 focus:border-gray-500 focus:ring-0">
+                            </div>
+                            <button onclick="deleteVendor('${vendor.id}')" class="minimal-button bg-red-50 text-red-600 hover:bg-red-100 text-sm">
+                                <i class="fas fa-trash-alt"></i> 刪除工程項目
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">合約總額 (NTD)</label>
+                                <input type="number" value="${vendor.contractTotal}" data-id="${vendor.id}" data-field="contractTotal" onchange="handleVendorChange(this)"
+                                       class="minimal-input text-lg font-semibold">
+                            </div>
+                            <div class="flex flex-col justify-end">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">剩餘應付款 (不含手續費)</label>
+                                <p class="text-xl font-bold ${remainingDue < 0 ? 'text-red-600' : 'text-green-600'}">
+                                    ${formatCurrency(remainingDue)}
+                                </p>
+                            </div>
+                        </div>
+
+                        <h4 class="text-md font-semibold mt-4 mb-2 border-t pt-2">請款明細</h4>
+                        <div class="overflow-x-auto">
+                            <div class="min-w-[700px]">
+                                <div class="grid grid-cols-6 gap-2 text-xs font-semibold text-gray-500 py-2 border-b">
+                                    <div>請款名目</div>
+                                    <div>日期</div>
+                                    <div class="text-right">支付金額</div>
+                                    <div class="text-right">手續費</div>
+                                    <div>備註/連結</div>
+                                    <div>刪除</div>
+                                </div>
+                                ${paymentsHtml}
+                            </div>
+                        </div>
+                        <button onclick="addVendorPayment('${vendor.id}')" class="minimal-button bg-gray-100 text-gray-700 hover:bg-gray-200 mt-4 text-sm">
+                            <i class="fas fa-plus-circle"></i> 新增請款期數
+                        </button>
+                    </div>
+                `;
+            });
+        };
+
+        // --- View 2: 年度總結渲染 (Annual Summary) ---
+        const renderAnnualSummaryView = () => {
+            const container = document.getElementById('annual-summary-table-body');
+            const totalsContainer = document.getElementById('annual-summary-totals');
+            container.innerHTML = '';
+            totalsContainer.innerHTML = '';
+
+            let annualTotals = { income: 0, expense: 0, profit: 0 };
+            const projectsByQuarter = {};
+
+            globalData.projects.forEach(project => {
+                const date = new Date(project.startDate || project.endDate);
+                if (isNaN(date)) return;
+
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                const quarter = Math.ceil(month / 3);
+                const key = `${year} Q${quarter}`;
+                if (!projectsByQuarter[key]) projectsByQuarter[key] = [];
+                projectsByQuarter[key].push(project);
+            });
+
+            // Iterate and render
+            Object.keys(projectsByQuarter).sort().reverse().forEach(quarterKey => {
+                let quarterTotalProfit = 0;
+                let quarterTotalIncome = 0;
+                let quarterTotalExpense = 0;
+
+                // Quarter Header
+                container.innerHTML += `
+                    <tr><td colspan="8" class="bg-gray-200 text-gray-800 font-bold p-3">${quarterKey} 專案總覽</td></tr>
+                `;
+
+                projectsByQuarter[quarterKey].forEach(project => {
+                    const summary = calculateProjectSummary(project);
+                    quarterTotalProfit += summary.totalProfit;
+                    quarterTotalIncome += summary.totalIncome;
+                    quarterTotalExpense += summary.totalExpense;
+
+                    annualTotals.income += summary.totalIncome;
+                    annualTotals.expense += summary.totalExpense;
+                    annualTotals.profit += summary.totalProfit;
+
+                    const costRatio = summary.totalIncome > 0 ? summary.totalExpense / summary.totalIncome : 0;
+                    const profitRatio = summary.totalIncome > 0 ? summary.totalProfit / summary.totalIncome : 0;
+
+                    container.innerHTML += `
+                        <tr class="hover:bg-gray-50 border-b">
+                            <td class="p-3 font-semibold text-gray-700">${project.name}</td>
+                            <td class="p-3 text-center">${summary.totalWorkingDays} 天</td>
+                            <td class="p-3 text-right">${formatCurrency(summary.totalIncome)}</td>
+                            <td class="p-3 text-right text-red-600">${formatCurrency(summary.totalExpense)}</td>
+                            <td class="p-3 text-right font-bold ${summary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                ${formatCurrency(summary.totalProfit)}
+                            </td>
+                            <td class="p-3 text-center">${formatPercentage(profitRatio)}</td>
+                            <td class="p-3 text-center">${formatPercentage(costRatio)}</td>
+                            <td class="p-3 text-center">
+                                <button onclick="editProject('${project.id}')" class="minimal-button bg-gray-100 text-sm py-1 px-2 text-gray-600 hover:bg-gray-200">
+                                    編輯專案
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                // Quarter Totals
+                const quarterProfitRatio = quarterTotalIncome > 0 ? quarterTotalProfit / quarterTotalIncome : 0;
+                const quarterCostRatio = quarterTotalIncome > 0 ? quarterTotalExpense / quarterTotalIncome : 0;
+                container.innerHTML += `
+                    <tr>
+                        <td class="p-3 font-bold bg-gray-100 text-gray-800" colspan="2">季度總計 (${quarterKey})</td>
+                        <td class="p-3 text-right font-bold bg-gray-100">${formatCurrency(quarterTotalIncome)}</td>
+                        <td class="p-3 text-right font-bold bg-gray-100 text-red-700">${formatCurrency(quarterTotalExpense)}</td>
+                        <td class="p-3 text-right font-bold bg-gray-100 ${quarterTotalProfit >= 0 ? 'text-green-700' : 'text-red-700'}">
+                            ${formatCurrency(quarterTotalProfit)}
+                        </td>
+                        <td class="p-3 text-center font-bold bg-gray-100">${formatPercentage(quarterProfitRatio)}</td>
+                        <td class="p-3 text-center font-bold bg-gray-100">${formatPercentage(quarterCostRatio)}</td>
+                        <td class="p-3 bg-gray-100"></td>
+                    </tr>
+                `;
+            });
+
+            // Annual Totals Summary Cards
+            const annualProfitRatio = annualTotals.income > 0 ? annualTotals.profit / annualTotals.income : 0;
+
+            totalsContainer.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="p-4 card">
+                        <p class="text-sm text-gray-500 mb-1">年度總收入</p>
+                        <p class="text-3xl font-extrabold text-gray-800">${formatCurrency(annualTotals.income)}</p>
+                    </div>
+                    <div class="p-4 card">
+                        <p class="text-sm text-gray-500 mb-1">年度總支出</p>
+                        <p class="text-3xl font-extrabold text-red-600">${formatCurrency(annualTotals.expense)}</p>
+                    </div>
+                    <div class="p-4 card bg-green-50">
+                        <p class="text-sm text-green-700 mb-1">年度總利潤 / 成數</p>
+                        <p class="text-3xl font-extrabold ${annualTotals.profit >= 0 ? 'text-green-800' : 'text-red-800'}">
+                            ${formatCurrency(annualTotals.profit)} <span class="text-2xl font-normal ml-2 text-gray-600">(${formatPercentage(annualProfitRatio)})</span>
+                        </p>
+                    </div>
+                </div>
+            `;
+        };
+
+        // --- 事件處理函數：專案詳情 ---
+
+        // Block 1 & Global Project Info
+        const handleProjectInfoChange = (el) => {
+            const project = getCurrentProject();
+            if (project) {
+                project[el.dataset.field] = el.value;
+                renderApp();
+            }
+        };
+
+        // Block 2: Contract Payments
+        const handleContractChange = (el) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const type = el.dataset.type;
+            const id = el.dataset.id;
+            const field = el.dataset.field;
+
+            const contract = type === 'engineering' ? project.engineeringContract : project.designContract;
+            const payment = contract.payments.find(p => p.id === id);
+            const contractTotal = parseFloat(contract.totalAmount) || 0; // 使用儲存的原始合約總額作為百分比計算基準
+
+            if (payment) {
+                if (field === 'percentage') {
+                    const percentage = parseFloat(el.value) || 0;
+                    payment.percentage = percentage;
+                    // Fix 1: Percentage to Amount linkage (Round to nearest integer for currency)
+                    payment.amount = Math.round((percentage / 100) * contractTotal);
+                } else if (field === 'amount') {
+                    const amount = parseFloat(el.value) || 0;
+                    payment.amount = amount;
+                    // Fix 1: Amount to Percentage linkage
+                    if (contractTotal > 0) {
+                        payment.percentage = parseFloat(((amount / contractTotal) * 100).toFixed(2));
+                    } else {
+                        payment.percentage = 0;
+                    }
+                } else {
+                    // Update text fields (term, dueDate)
+                    payment[field] = el.value;
+                }
+            }
+            renderApp();
+        };
+
+        // 移除 updateContractTotal 函數，因為手動輸入總額的欄位已被移除
+
+        const toggleContractStatus = (type, id) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const contract = type === 'engineering' ? project.engineeringContract : project.designContract;
+            const payment = contract.payments.find(p => p.id === id);
+
+            if (payment) {
+                payment.status = payment.status === 'received' ? 'unpaid' : 'received';
+            }
+            renderApp();
+        };
+
+        const addContractPayment = (type) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const contract = type === 'engineering' ? project.engineeringContract : project.designContract;
+            const newTermNumber = contract.payments.length + 1;
+
+            // 新增期數預設為 0 金額和 0 比例
+            contract.payments.push({
+                id: crypto.randomUUID(),
+                term: `第${newTermNumber}期：新增名目`,
+                percentage: 0,
+                amount: 0,
+                dueDate: '',
+                status: 'unpaid'
+            });
+            renderApp();
+        };
+
+        const deleteContractPayment = (type, id) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const contract = type === 'engineering' ? project.engineeringContract : project.designContract;
+            contract.payments = contract.payments.filter(p => p.id !== id);
+            renderApp();
+        };
+
+
+        // Block 3: Adjustments
+        const addAdjustment = () => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.adjustments.push({
+                id: crypto.randomUUID(),
+                type: 'add',
+                item: '新追加項目',
+                date: new Date().toISOString().substring(0, 10),
+                amount: 0
+            });
+            renderApp();
+        };
+
+        const handleAdjustmentChange = (el) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const adj = project.adjustments.find(a => a.id === el.dataset.id);
+            if (adj) {
+                const field = el.dataset.field;
+                adj[field] = field === 'amount' ? (parseFloat(el.value) || 0) : el.value;
+            }
+            renderApp();
+        };
+
+        const deleteAdjustment = (id) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.adjustments = project.adjustments.filter(a => a.id !== id);
+            renderApp();
+        };
+
+        // Block 4: Purchases
+        const addPurchase = () => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.purchases.push({
+                id: crypto.randomUUID(),
+                item: '新代購項目',
+                date: new Date().toISOString().substring(0, 10),
+                amount: 0
+            });
+            renderApp();
+        };
+
+        const handlePurchaseChange = (el) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const purchase = project.purchases.find(p => p.id === el.dataset.id);
+            if (purchase) {
+                const field = el.dataset.field;
+                purchase[field] = field === 'amount' ? (parseFloat(el.value) || 0) : el.value;
+            }
+            renderApp();
+        };
+
+        const deletePurchase = (id) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.purchases = project.purchases.filter(p => p.id !== id);
+            renderApp();
+        };
+
+        // Block 5: Vendors
+        const addVendor = () => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.vendors.push({
+                id: crypto.randomUUID(),
+                name: '新工程項目',
+                company: '廠商名稱',
+                contractTotal: 0,
+                payments: [{
+                    id: crypto.randomUUID(),
+                    term: '第一期',
+                    date: new Date().toISOString().substring(0, 10),
+                    payment: 0,
+                    fee: 0,
+                    notes: '轉帳'
+                }]
+            });
+            renderApp();
+        };
+
+        const deleteVendor = (id) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            project.vendors = project.vendors.filter(v => v.id !== id);
+            renderApp();
+        };
+
+        const handleVendorChange = (el) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const vendor = project.vendors.find(v => v.id === el.dataset.id);
+            if (vendor) {
+                const field = el.dataset.field;
+                vendor[field] = field === 'contractTotal' ? (parseFloat(el.value) || 0) : el.value;
+            }
+            renderApp();
+        };
+
+        const addVendorPayment = (vendorId) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const vendor = project.vendors.find(v => v.id === vendorId);
+            if (vendor) {
+                vendor.payments.push({
+                    id: crypto.randomUUID(),
+                    term: `第${vendor.payments.length + 1}期`,
+                    date: new Date().toISOString().substring(0, 10),
+                    payment: 0,
+                    fee: 0,
+                    notes: '轉帳'
+                });
+            }
+            renderApp();
+        };
+
+        const deleteVendorPayment = (vendorId, paymentId) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const vendor = project.vendors.find(v => v.id === vendorId);
+            if (vendor) {
+                vendor.payments = vendor.payments.filter(p => p.id !== paymentId);
+            }
+            renderApp();
+        };
+
+        const handleVendorPaymentChange = (el) => {
+            const project = getCurrentProject();
+            if (!project) return;
+            const vendor = project.vendors.find(v => v.id === el.dataset.vendorId);
+            if (vendor) {
+                const payment = vendor.payments.find(p => p.id === el.dataset.id);
+                if (payment) {
+                    const field = el.dataset.field;
+                    if (field === 'payment' || field === 'fee') {
+                        payment[field] = parseFloat(el.value) || 0;
+                    } else {
+                        payment[field] = el.value;
+                    }
+                }
+            }
+            renderApp();
+        };
+
+        // --- 事件處理函數：專案總結 ---
+        const editProject = (id) => {
+            globalData.currentProjectId = id;
+            switchView('project-detail');
+        };
+
+        const createNewProjectFromSummary = () => {
+            const newProject = createNewProject('新的專案名稱');
+            globalData.projects.push(newProject);
+            globalData.currentProjectId = newProject.id;
+            switchView('project-detail');
+        };
+
+        // --- 初始化 ---
+        window.onload = () => {
+            loadData();
+            // 初始視圖改為年度總結
+            document.getElementById('app-container').dataset.view = 'annual-summary';
+            document.getElementById('project-detail-view').classList.add('hidden');
+            renderApp();
+        };
+
+    </script>
+
+    <!-- 頂部導航列 (Navigation) - 順序已調整 -->
+    <header class="sticky top-0 z-10 bg-white border-b border-gray-100 shadow-sm">
+        <nav class="flex justify-between items-center max-w-7xl mx-auto p-3 sm:px-6 lg:px-8">
+            <h1 class="text-xl font-bold text-gray-800">貳柒室內設計工作室-專案工程記帳簿</h1>
+            <div class="flex space-x-2">
+                <!-- 1. 年度總結 (Annual Summary) -->
+                <button onclick="switchView('annual-summary')"
+                        class="minimal-button text-sm text-gray-700 hover:bg-gray-100 p-2">
+                    <i class="fas fa-chart-line mr-1"></i> 年度總結
+                </button>
+                <!-- 2. 專案詳情 (Project Detail) -->
+                <button onclick="switchView('project-detail')"
+                        class="minimal-button text-sm text-gray-700 hover:bg-gray-100 p-2">
+                    <i class="fas fa-clipboard-list mr-1"></i> 專案詳情
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- 主內容區塊 -->
+    <main id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8" data-view="annual-summary">
+
+        <!-- 年度工程專案總結費用 (Annual Summary View) -->
+        <section id="annual-summary-view">
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">年度工程專案總結費用</h2>
+
+            <!-- 專案總計 -->
+            <div id="annual-summary-totals" class="mb-6">
+                <!-- 渲染內容 -->
+            </div>
+
+            <!-- 專案列表與季度總結 -->
+            <div class="card p-4 overflow-x-auto">
+                <div class="flex justify-end mb-4">
+                     <button onclick="createNewProjectFromSummary()" class="minimal-button bg-blue-500 text-white hover:bg-blue-600 text-sm">
+                        <i class="fas fa-plus-square"></i> 建立新專案
+                    </button>
+                </div>
+                <table class="w-full text-left whitespace-nowrap min-w-[900px]">
+                    <thead>
+                        <tr class="text-xs font-semibold uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                            <th class="p-3">專案名稱</th>
+                            <th class="p-3 text-center">總工作天數</th>
+                            <th class="p-3 text-right">總收入</th>
+                            <th class="p-3 text-right">總支出</th>
+                            <th class="p-3 text-right">總利潤</th>
+                            <th class="p-3 text-center">利潤成數</th>
+                            <th class="p-3 text-center">成本佔比</th>
+                            <th class="p-3">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="annual-summary-table-body" class="divide-y divide-gray-100">
+                        <!-- 渲染內容 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 裝修工程專案管理表 (Project Detail View) -->
+        <section id="project-detail-view" class="hidden">
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">裝修工程專案管理表</h2>
+
+            <!-- 區塊 1: 專案資訊與總結統計 -->
+            <div class="card p-4 mb-6">
+                <div class="mb-4 space-y-3">
+                    <label class="block text-sm font-medium text-gray-500">專案名稱</label>
+                    <input type="text" id="project-name-input" data-field="name" onchange="handleProjectInfoChange(this)"
+                           class="w-full text-2xl font-bold p-2 border-b-2 border-gray-200 focus:border-gray-500 focus:ring-0">
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500 mt-2">開始日期</label>
+                            <input type="date" id="project-start-date" data-field="startDate" onchange="handleProjectInfoChange(this)"
+                                class="minimal-input p-2 text-md">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500 mt-2">結束日期</label>
+                            <input type="date" id="project-end-date" data-field="endDate" onchange="handleProjectInfoChange(this)"
+                                class="minimal-input p-2 text-md">
+                        </div>
+                        <div class="flex flex-col justify-end">
+                            <label class="block text-sm font-medium text-gray-500 mb-1">總工作天數</label>
+                            <p id="total-working-days" class="text-xl font-bold text-gray-700 p-2 bg-gray-50 rounded-lg">0 天</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <h3 class="text-lg font-semibold border-t pt-4 mt-4 mb-3">專案財務總覽</h3>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                    <div class="p-3 bg-green-50 rounded-lg">
+                        <p class="text-xs text-green-700 font-medium">總利潤</p>
+                        <p id="total-profit" class="text-xl font-bold text-green-800">NT$0</p>
+                    </div>
+                    <div class="p-3 bg-green-50 rounded-lg">
+                        <p class="text-xs text-green-700 font-medium">利潤成數</p>
+                        <p id="profit-ratio" class="text-xl font-bold text-green-800">0.0%</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <p class="text-xs text-gray-600 font-medium">總收入</p>
+                        <p id="total-income" class="text-xl font-bold text-gray-800">NT$0</p>
+                    </div>
+                    <div class="p-3 bg-red-50 rounded-lg">
+                        <p class="text-xs text-red-700 font-medium">總支出</p>
+                        <p id="total-expense" class="text-xl font-bold text-red-800">NT$0</p>
+                    </div>
+                    <div class="p-3 bg-red-50 rounded-lg">
+                        <p class="text-xs text-red-700 font-medium">成本佔比</p>
+                        <p id="cost-ratio" class="text-xl font-bold text-red-800">0.0%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 區塊 2: 收入來源區 (合約款項) -->
+            <div class="card p-4 mb-6">
+                <h3 class="text-lg font-semibold mb-3 border-b pb-2">＄收入來源-合約款項</h3>
+
+                <div id="engineering-contract"></div>
+                <div id="design-contract"></div>
+            </div>
+
+            <!-- 區塊 3: 工程追加/減少 -->
+            <div class="card p-4 mb-6">
+                <div class="flex justify-between items-center mb-3 border-b pb-2">
+                    <h3 class="text-lg font-semibold">工程追加/減少</h3>
+                    <button onclick="addAdjustment()" class="minimal-button bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 text-sm">
+                        <i class="fas fa-plus-circle"></i> 新增項目
+                    </button>
+                </div>
+                <div id="adjustments-container" class="overflow-x-auto min-w-full">
+                    <!-- 渲染內容 -->
+                </div>
+            </div>
+
+            <!-- 區塊 4: 設計師代購 -->
+            <div class="card p-4 mb-6">
+                <div class="flex justify-between items-center mb-3 border-b pb-2">
+                    <h3 class="text-lg font-semibold">設計師代購 (收入/支出同時增加)</h3>
+                    <button onclick="addPurchase()" class="minimal-button bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 text-sm">
+                        <i class="fas fa-plus-circle"></i> 新增項目
+                    </button>
+                </div>
+                <div id="purchases-container" class="overflow-x-auto min-w-full">
+                    <!-- 渲染內容 -->
+                </div>
+            </div>
+
+            <!-- 區塊 5: 外包廠商請款管理 -->
+            <div class="card p-4 mb-6">
+                <div class="flex justify-between items-center mb-3 border-b pb-2">
+                    <h3 class="text-lg font-semibold">外包廠商請款管理（工程項目）</h3>
+                    <button onclick="addVendor()" class="minimal-button bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 text-sm">
+                        <i class="fas fa-plus-square"></i> 新增工程項目
+                    </button>
+                </div>
+                <div id="vendors-container">
+                    <!-- 渲染內容 -->
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
